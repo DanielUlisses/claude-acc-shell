@@ -5,7 +5,7 @@
   "version": "1.0.0",
   "author": "Daniel Silva",
   "license": "MIT",
-  "description": "Shows Claude Code rate-limit usage for every claude-acc account.",
+  "description": "Session/weekly rate limits and token usage for every claude-acc account, one tab each.",
   "kinds": ["bar-widget"],
   "activation": "on-demand",
   "entryPoints": {
@@ -13,15 +13,15 @@
   },
   "barWidget": {
     "displayName": "Claude Acc Usage",
-    "description": "Session/weekly rate limits for every claude-acc account.",
+    "description": "Session/weekly rate limits and token usage for every claude-acc account, one tab each.",
     "category": "AI",
     "aliases": ["claude-acc", "claudeacc", "claude-accounts"],
     "allowMultiple": false,
     "defaults": {
-      "refreshIntervalSec": 300
+      "refreshIntervalSec": 900
     },
     "schema": [
-      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 30, "max": 3600, "step": 30, "defaultValue": 300 }
+      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 60, "max": 3600, "step": 30, "defaultValue": 900 }
     ]
   }
 }

@@ -285,6 +285,32 @@ Panel {
       else if (buttonCode === Qt.MiddleButton) root.selectAccount(root.accountIndex + 1)
       else root.toggle()
     }
+
+    iconComponent: Component {
+      Item {
+        id: barMark
+        anchors.fill: parent
+
+        Image {
+          id: barMarkImage
+          anchors.fill: parent
+          source: Qt.resolvedUrl("assets/claude.svg")
+          sourceSize.width: button.opticalSize * 2
+          sourceSize.height: button.opticalSize * 2
+          fillMode: Image.PreserveAspectFit
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          anchors.centerIn: parent
+          visible: barMarkImage.status !== Image.Ready
+          text: button.text
+          color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+          font.family: button.fontFamily
+          font.pixelSize: button.fontSize
+        }
+      }
+    }
   }
 
   KeyboardPanel {

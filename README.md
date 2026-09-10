@@ -3,10 +3,10 @@
 An [Omarchy](https://omarchy.org/) bar widget that shows Claude Code usage —
 5-hour session and 7-day weekly rate limits, tokens by day, tokens by model —
 for every account tracked by
-[`claude-acc`](https://github.com/danielusilva/claude-acc-shell), one tab per
-account. Read-only, no switching; use `claude-acc` itself for that
-(`claude-acc default`, `claude-acc link`, …), or right-click the bar icon to
-open a terminal running `claude-acc run <account>`.
+[`claude-acc`](https://github.com/Nemo-Illusionist/claude-code-account-switcher),
+one tab per account. Read-only, no switching; use `claude-acc` itself for
+that (`claude-acc default`, `claude-acc link`, …), or right-click the bar
+icon to open a terminal running `claude-acc run <account>`.
 
 Styled after Omarchy's stock Agents panel — and built on top of it: the
 numbers come from Omarchy's own `omarchy-agent-usage-claude` collector, run
@@ -23,15 +23,24 @@ account-switching side of this for `cswap`.
 - Omarchy with the shell plugin system (`omarchy plugin` commands available)
   — specifically `omarchy-agent-usage-claude`, which ships with the stock
   Agents plugin
-- [`claude-acc`](https://github.com/danielusilva/claude-acc-shell) on `PATH`
-  (or at `~/.claude-switch/bin/claude-acc`), with accounts under
+- [`claude-acc`](https://github.com/Nemo-Illusionist/claude-code-account-switcher)
+  on `PATH` (or at `~/.claude-switch/bin/claude-acc`), with accounts under
   `~/.claude-switch/accounts/`
 - `python3`
 
 ## Install
 
 ```bash
-omarchy plugin add <git-url-of-this-repo> --enable
+omarchy plugin add https://github.com/danielusilva/claude-acc-shell.git --enable
+```
+
+Lands in the bar's right section by default (next to the stock Agents icon).
+This widget's per-account tabs already cover what the stock Agents panel
+shows for the default Claude account, so consider disabling that one to
+avoid seeing the same numbers twice:
+
+```bash
+omarchy plugin disable omarchy.agents
 ```
 
 For local development, copy (not symlink — the plugin validator rejects

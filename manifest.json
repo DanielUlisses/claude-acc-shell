@@ -17,6 +17,7 @@
     "category": "AI",
     "aliases": ["claude-acc", "claudeacc", "claude-accounts"],
     "allowMultiple": false,
+    "defaultSection": "right",
     "defaults": {
       "refreshIntervalSec": 900
     },

@@ -31,7 +31,7 @@ account-switching side of this for `cswap`.
 ## Install
 
 ```bash
-omarchy plugin add https://github.com/danielusilva/claude-acc-shell.git --enable
+omarchy plugin add https://github.com/danielulisses/claude-acc-shell.git --enable
 ```
 
 Lands in the bar's right section by default (next to the stock Agents icon).

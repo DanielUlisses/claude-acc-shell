@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "claude-acc.usage",
+  "name": "Claude Acc Usage",
+  "version": "1.0.0",
+  "author": "Daniel Silva",
+  "license": "MIT",
+  "description": "Shows Claude Code rate-limit usage for every claude-acc account.",
+  "kinds": ["bar-widget"],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Claude Acc Usage",
+    "description": "Session/weekly rate limits for every claude-acc account.",
+    "category": "AI",
+    "aliases": ["claude-acc", "claudeacc", "claude-accounts"],
+    "allowMultiple": false,
+    "defaults": {
+      "refreshIntervalSec": 300
+    },
+    "schema": [
+      { "key": "refreshIntervalSec", "type": "integer", "label": "Refresh interval (seconds)", "min": 30, "max": 3600, "step": 30, "defaultValue": 300 }
+    ]
+  }
+}

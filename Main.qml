@@ -39,12 +39,25 @@ Item {
     if (!listProcess.running) listProcess.running = true
   }
 
+  // Same allowlist bin/claude-acc-usage-update enforces before it will ever
+  // write a record: a key reaching this file has to have cleared it there
+  // too, but a stray file dropped straight into usageDir shouldn't get a
+  // free pass around that check. Mirrored in KEY_RE there — keep both in
+  // sync. The single QML copy: Panel.qml calls this one instead of keeping
+  // its own.
+  function isValidAccountKey(key) {
+    return /^[A-Za-z0-9_][A-Za-z0-9_-]*$/.test(String(key || ""))
+  }
+
   function applyListing(output) {
     var keys = []
     var lines = String(output || "").split("\n")
     for (var i = 0; i < lines.length; i++) {
       var name = lines[i].trim()
-      if (name.slice(-5) === ".json") keys.push(name.slice(0, -5))
+      if (name.slice(-5) === ".json") {
+        var key = name.slice(0, -5)
+        if (root.isValidAccountKey(key)) keys.push(key)
+      }
     }
     keys.sort()
     // Same list, same objects: reassigning the model would tear down every
@@ -99,7 +112,12 @@ Item {
     var advising = []
     for (var i = 0; i < agents.length; i++) {
       var record = agents[i] ? agents[i].record : null
-      if (record && record.retryAdvised === true) advising.push(String(record.accountKey))
+      if (!record || record.retryAdvised !== true) continue
+      // accountKey is record content, not the filename applyListing()
+      // already checked — still untrusted, and it flows straight into
+      // runUpdate()'s subprocess argv below.
+      var key = String(record.accountKey)
+      if (root.isValidAccountKey(key)) advising.push(key)
     }
     retryKeys = advising
     if (advising.length > 0) limitsRetry.restart()

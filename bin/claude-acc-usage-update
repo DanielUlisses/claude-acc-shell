@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "claude-acc-shell" / "usage"
@@ -29,6 +30,37 @@ ACCOUNTS_DIR = Path.home() / ".claude-switch" / "accounts"
 
 LIST_ROW_RE = re.compile(r"^(\S+)\s+(\S+@\S+)")
 ACTIVE_RE = re.compile(r"Active account:\s*(\S+)")
+
+# Account keys end up in argv (via --launch) and in filesystem paths under
+# STATE_DIR/CACHE_ROOT, so anything from claude-acc's untrusted
+# directory-name-derived output has to clear this before it's trusted. A
+# leading "-" is rejected on top of the character class: a key that reads
+# as an option (e.g. "-h") is a landmine for any tool that ever receives it
+# without a "--" separator ahead of it.
+#
+# Mirrored in isValidAccountKey() in Main.qml (the only QML copy — Panel.qml
+# calls that one rather than keeping its own). Keep both in sync.
+KEY_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
+
+
+def is_safe_key(key: str) -> bool:
+    return bool(KEY_RE.match(key))
+
+
+def resolve_account_key(name: str) -> str | None:
+    """Map a name reported by claude-acc (a list row or the active status
+    name) to a safe record key, or None if it's unsafe or would collide
+    with the reserved ~/.claude/ -> "default" mapping."""
+    if name == "~/.claude/":
+        return "default"
+    if not is_safe_key(name) or name == "default":
+        return None
+    return name
+
+
+def ensure_private_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    path.chmod(0o700)
 
 
 def find_claude_acc() -> str | None:
@@ -50,10 +82,6 @@ def run(cmd: list[str], timeout: float = 10, env: dict | None = None) -> subproc
         return None
 
 
-def account_key(name: str) -> str:
-    return "default" if name == "~/.claude/" else name
-
-
 def discover_accounts(claude_acc: str | None) -> list[dict]:
     accounts: list[dict] = []
     if claude_acc:
@@ -64,19 +92,32 @@ def discover_accounts(claude_acc: str | None) -> list[dict]:
                 if not m:
                     continue
                 name, email = m.group(1), m.group(2)
-                accounts.append({"key": account_key(name), "label": name, "email": email})
+                key = resolve_account_key(name)
+                if key is None:
+                    print(f"claude-acc-usage-update: skipping unsafe account name {name!r}", file=sys.stderr)
+                    continue
+                accounts.append({"key": key, "label": name, "email": email})
 
     if not accounts:
         # claude-acc missing or reports nothing: fall back to the plain
         # ~/.claude/ dir so the panel still shows something.
         accounts.append({"key": "default", "label": "~/.claude/", "email": ""})
 
+    # Default: nobody has been told otherwise, so assume the default
+    # account is active. But an active name that *was* reported and turned
+    # out unsafe is not "nobody told us" — it's an untrustworthy answer, so
+    # it marks no account active rather than falling back to a guess.
     active_key = "default"
     if claude_acc:
         result = run([claude_acc, "status"])
         m = ACTIVE_RE.search(result.stdout) if result and result.returncode == 0 else None
         if m:
-            active_key = account_key(m.group(1))
+            key = resolve_account_key(m.group(1))
+            if key is None:
+                print(f"claude-acc-usage-update: skipping unsafe active account name {m.group(1)!r}", file=sys.stderr)
+                active_key = None
+            else:
+                active_key = key
 
     for account in accounts:
         account["active"] = account["key"] == active_key
@@ -99,7 +140,7 @@ def collect_one(account: dict, collector: str, extra_args: list[str]) -> dict | 
     env["CLAUDE_CONFIG_DIR"] = str(config_dir)
     if key != "default":
         account_cache = CACHE_ROOT / key
-        account_cache.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(account_cache)
         env["XDG_CACHE_HOME"] = str(account_cache)
 
     result = run([collector, *extra_args], timeout=20, env=env)
@@ -124,10 +165,18 @@ def collect_one(account: dict, collector: str, extra_args: list[str]) -> dict | 
 
 
 def write_record(key: str, record: dict) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_DIR / f".{key}.json.tmp"
-    tmp.write_text(json.dumps(record, separators=(",", ":")) + "\n", encoding="utf-8")
-    tmp.replace(STATE_DIR / f"{key}.json")
+    ensure_private_dir(STATE_DIR)
+    fd, tmp_name = tempfile.mkstemp(dir=STATE_DIR, prefix=f".{key}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(json.dumps(record, separators=(",", ":")) + "\n")
+        os.replace(tmp_name, STATE_DIR / f"{key}.json")
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
 
 
 def prune_stale(valid_keys: set[str]) -> None:
@@ -136,24 +185,72 @@ def prune_stale(valid_keys: set[str]) -> None:
     for path in STATE_DIR.glob("*.json"):
         if path.stem not in valid_keys:
             path.unlink(missing_ok=True)
+    for path in STATE_DIR.glob(".*.tmp"):
+        path.unlink(missing_ok=True)
+
+
+def pause_before_exit() -> None:
+    try:
+        input("Press Enter to close...")
+    except (EOFError, OSError):
+        pass
+
+
+def do_launch(key: str) -> int:
+    if not is_safe_key(key):
+        print(f"claude-acc-usage-update: refusing to launch unsafe account key {key!r}", file=sys.stderr)
+        pause_before_exit()
+        return 1
+
+    claude_acc = find_claude_acc()
+    if claude_acc is None:
+        print("claude-acc-usage-update: claude-acc not found on PATH or in ~/.claude-switch/bin", file=sys.stderr)
+        pause_before_exit()
+        return 1
+
+    try:
+        os.execv(claude_acc, [claude_acc, "run", "--", key])
+    except OSError as exc:
+        print(f"claude-acc-usage-update: failed to launch claude-acc: {exc}", file=sys.stderr)
+        pause_before_exit()
+        return 1
 
 
 def main() -> int:
     args = sys.argv[1:]
+
+    if "--launch" in args:
+        idx = args.index("--launch")
+        if idx + 1 >= len(args):
+            print("claude-acc-usage-update: --launch requires a KEY argument", file=sys.stderr)
+            pause_before_exit()
+            return 1
+        return do_launch(args[idx + 1])
+
     extra = [a for a in args if a in ("--force", "--limits-only")]
-    only_keys = {a for a in args if not a.startswith("--")}
+    raw_only_keys = [a for a in args if not a.startswith("--")]
+    only_keys: set[str] = set()
+    for key in raw_only_keys:
+        if is_safe_key(key):
+            only_keys.add(key)
+        else:
+            print(f"claude-acc-usage-update: skipping unsafe key argument {key!r}", file=sys.stderr)
+    # A caller that named specific keys wants exactly those, even if every
+    # one of them turned out unsafe — that must not silently fall back to
+    # refreshing (or pruning) every account.
+    filtered_by_keys = len(raw_only_keys) > 0
 
     claude_acc = find_claude_acc()
     collector = find_collector()
     accounts = discover_accounts(claude_acc)
-    targets = [a for a in accounts if not only_keys or a["key"] in only_keys]
+    targets = [a for a in accounts if not filtered_by_keys or a["key"] in only_keys]
 
     for account in targets:
         record = collect_one(account, collector, extra)
         if record is not None:
             write_record(account["key"], record)
 
-    if not only_keys:
+    if not filtered_by_keys:
         prune_stale({a["key"] for a in accounts})
     return 0
 

@@ -6,7 +6,11 @@ for every account tracked by
 [`claude-acc`](https://github.com/Nemo-Illusionist/claude-code-account-switcher),
 one tab per account. Read-only, no switching; use `claude-acc` itself for
 that (`claude-acc default`, `claude-acc link`, …), or right-click the bar
-icon to open a terminal running `claude-acc run <account>`.
+icon to open a terminal running `claude-acc run <account>`. That launch goes
+through `bin/claude-acc-usage-update --launch <account>`, which resolves
+`claude-acc` the same way discovery does (`PATH`, then
+`~/.claude-switch/bin`) and execs it directly — no shell involved, so an
+account name can't inject shell syntax or CLI options.
 
 Styled after Omarchy's stock Agents panel — and built on top of it: the
 numbers come from Omarchy's own `omarchy-agent-usage-claude` collector, run
@@ -49,6 +53,12 @@ symlinks) this folder into `~/.config/omarchy/plugins/claude-acc.usage`, then
 `omarchy restart shell` — this widget's `Main.qml`/`Panel.qml` aren't always
 picked up by the shell's own hot-reload.
 
+Run the test suite with:
+
+```bash
+python3 -m unittest discover tests
+```
+
 ## Interactions
 
 - Bar icon: left = toggle panel, right = launch `claude-acc run` for the
@@ -65,8 +75,13 @@ Each account is one JSON record in
 for the account roster and which one is active, then runs
 `omarchy-agent-usage-claude` once per account with `CLAUDE_CONFIG_DIR` set to
 that account's directory (`~/.claude/` for the default account,
-`~/.claude-switch/accounts/<name>/` for the rest). Each secondary account
-gets its own `XDG_CACHE_HOME` so one account's rate-limit probe cache can't
+`~/.claude-switch/accounts/<name>/` for the rest). An account name outside
+`[A-Za-z0-9_-]`, starting with `-`, or the reserved name `default` is
+skipped with a warning on stderr — visible in the shell's log — instead of
+becoming a record; a directory under `~/.claude-switch/accounts/` is
+untrusted input, since anything with write access there can name it
+whatever it likes. Each secondary account gets its own `XDG_CACHE_HOME` so
+one account's rate-limit probe cache can't
 collide with another's — the collector's limits cache isn't itself
 namespaced by `CLAUDE_CONFIG_DIR`. The default account shares the real
 `XDG_CACHE_HOME`, so it shares a cache with the stock Agents panel instead of

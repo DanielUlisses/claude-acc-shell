@@ -62,7 +62,16 @@ Panel {
   }
 
   function launchAccount() {
-    if (root.account) Quickshell.execDetached(["omarchy", "launch", "terminal", "bash", "-c", "claude-acc run " + root.account.accountKey])
+    // Records are untrusted (a crafted claude-acc account directory name
+    // could otherwise inject shell syntax or CLI flags), so this guards the
+    // key one more time here — via Main.qml's own allowlist (usage.isValidAccountKey),
+    // the single source of truth for it on the QML side — even though
+    // applyListing() already drops anything that fails it before a record
+    // can exist at all.
+    if (root.account && usage.isValidAccountKey(root.account.accountKey)) {
+      Quickshell.execDetached(["omarchy", "launch", "terminal", "python3",
+        root.pluginDir + "/bin/claude-acc-usage-update", "--launch", root.account.accountKey])
+    }
     root.close()
   }
 

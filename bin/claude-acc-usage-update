@@ -28,7 +28,10 @@ STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "stat
 CACHE_ROOT = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "claude-acc-shell" / "accounts"
 ACCOUNTS_DIR = Path.home() / ".claude-switch" / "accounts"
 
-LIST_ROW_RE = re.compile(r"^(\S+)\s+(\S+@\S+)")
+# The email column is optional: claude-acc prints a bare "~/.claude/  (standard)"
+# row until it has cached that account's identity, and requiring an email
+# there dropped the default account (and pruned its record).
+LIST_ROW_RE = re.compile(r"^(\S+)(?:\s+(\S+@\S+))?")
 ACTIVE_RE = re.compile(r"Active account:\s*(\S+)")
 
 # Account keys end up in argv (via --launch) and in filesystem paths under
@@ -88,10 +91,14 @@ def discover_accounts(claude_acc: str | None) -> list[dict]:
         result = run([claude_acc, "list"])
         if result and result.returncode == 0:
             for line in result.stdout.splitlines():
-                m = LIST_ROW_RE.match(line.strip())
+                line = line.strip()
+                # Skip the "Claude Code accounts:" header.
+                if not line or line.endswith(":"):
+                    continue
+                m = LIST_ROW_RE.match(line)
                 if not m:
                     continue
-                name, email = m.group(1), m.group(2)
+                name, email = m.group(1), m.group(2) or ""
                 key = resolve_account_key(name)
                 if key is None:
                     print(f"claude-acc-usage-update: skipping unsafe account name {name!r}", file=sys.stderr)

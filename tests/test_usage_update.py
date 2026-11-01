@@ -112,6 +112,24 @@ class IngestionAllowlistTests(UsageUpdateTestCase):
         self.assertTrue((self.state_dir / "default.json").is_file())
         self.assertTrue((self.state_dir / "acct1.json").is_file())
 
+    def test_default_row_without_email_still_produces_record(self) -> None:
+        self.make_default_dir()
+        self.make_account_dir("acct1")
+        self.write_stub_config(
+            list_lines=[
+                "Claude Code accounts:",
+                "    acct1  a1@example.com  2m ago",
+                "    ~/.claude/  (standard)",
+            ],
+            active="acct1",
+        )
+
+        result = self.run_script([])
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        produced = {p.name for p in self.state_dir.glob("*.json")}
+        self.assertEqual(produced, {"default.json", "acct1.json"})
+
     def test_crafted_name_is_skipped_with_warning(self) -> None:
         self.make_default_dir()
         self.write_stub_config(
